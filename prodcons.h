@@ -9,8 +9,8 @@
 
 #ifndef PRODCONS_H
 #define PRODCONS_H
+#include "counter.h"
 
-#include "pcmatrix.h"
 
 Matrix ** bigmatrix;
 
@@ -26,12 +26,17 @@ typedef struct prodcons {
   int matrixtotal;
 } ProdConsStats;
 
+typedef struct thread_args {
+    counters_t *counters;
+    ProdConsStats *prodConStats;
+} thread_args_t;
+
 // PRODUCER-CONSUMER thread method function prototypes
 void *prod_worker(void *arg);
 void *cons_worker(void *arg);
 
 // Routines to add and remove matrices from the bounded buffer
-int put(Matrix *value, thread_args_t *params);
+int put(Matrix *value, void *args);
 Matrix * get();
 void init_semiphores(int buffer_max);
 

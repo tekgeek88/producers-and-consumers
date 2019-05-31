@@ -42,7 +42,8 @@ void init_semiphores(int buffer_max) {
 }
 
 // Bounded buffer put() get()
-int put(Matrix *value, thread_args_t *params) {
+int put(Matrix *value, void *args) {
+  thread_args_t *params = (thread_args_t*) args;
   if (params->counters->prod->value < BOUNDED_BUFFER_SIZE) {
     bigmatrix[fill_ptr] = value;
     fill_ptr = (fill_ptr + 1) % MAX;

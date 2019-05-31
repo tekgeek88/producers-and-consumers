@@ -7,9 +7,6 @@
  *  Spring 2019
  */
 
-#include "prodcons.h"
-#include "counter.h"
-
 // Number of worker threads - NUMWORK producers, NUMWORK consumers
 #define NUMWORK 1
 
@@ -30,10 +27,7 @@ int NUMBER_OF_MATRICES;
 #define DEFAULT_MATRIX_MODE 0
 int MATRIX_MODE;
 
-typedef struct thread_args {
-    counters_t *counters;
-    ProdConsStats *prodConStats;
-} thread_args_t;
+#include "prodcons.h"
+#include "counter.h"
 
 void displayStats(const thread_args_t *params);
-void init_ProdConStats(ProdConsStats *pcs);
