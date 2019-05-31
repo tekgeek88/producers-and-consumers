@@ -37,7 +37,8 @@ void *cons_worker(void *arg);
 
 // Routines to add and remove matrices from the bounded buffer
 int put(Matrix *value, void *args);
-Matrix * get();
-void init_semiphores(int buffer_max);
+Matrix * get(void*);
+void init_buffer_size_counter();
+
 
 #endif //PROCON_PROCON_H

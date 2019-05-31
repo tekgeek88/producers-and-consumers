@@ -26,6 +26,7 @@ typedef struct __counters_t {
 // counter methods
 void init_cnt(counter_t *c);
 void init_counters(counters_t *c);
+void decrement_cnt(counter_t *c);
 void increment_cnt(counter_t *c);
 int get_cnt(counter_t *c);
 

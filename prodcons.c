@@ -22,37 +22,39 @@
 
 
 // Define Locks and Condition variables here
+pthread_cond_t empty = PTHREAD_COND_INITIALIZER;
+pthread_cond_t fill = PTHREAD_COND_INITIALIZER;
+pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+
 int use_ptr   = 0;
 int fill_ptr  = 0;
 
-static volatile counters_t counters;
-
 // Producer consumer data structures
-sem_t empty;
-sem_t full;
-sem_t mutex;
+counter_t *counter;
 
 // Bounded buffer bigmatrix defined in prodcons.h
 Matrix ** bigmatrix;
 
-void init_semiphores(int buffer_max) {
-  sem_init(&empty, 0, buffer_max);
-  sem_init(&full, 0, 0);
-  sem_init(&mutex, 0, 1);
+void init_buffer_size_counter() {
+  counter = (counter_t*) malloc(sizeof(counter_t));
+  init_cnt(counter);
 }
 
 // Bounded buffer put() get()
 int put(Matrix *value, void *args) {
   thread_args_t *params = (thread_args_t*) args;
-  if (params->counters->prod->value < BOUNDED_BUFFER_SIZE) {
-    bigmatrix[fill_ptr] = value;
-    fill_ptr = (fill_ptr + 1) % MAX;
-  }
+  fill_ptr = get_cnt(params->counters->prod) % BOUNDED_BUFFER_SIZE;
+  bigmatrix[fill_ptr] = value;
+  increment_cnt(params->counters->prod);
+  increment_cnt(counter);
 }
 
-Matrix *get() {
+Matrix *get(void *args) {
+  thread_args_t *params = (thread_args_t*) args;
+  use_ptr = get_cnt(params->counters->cons);
   Matrix *tmp_matrix = bigmatrix[use_ptr];
-  use_ptr = (use_ptr + 1) % MAX;
+  increment_cnt(params->counters->cons);
+  decrement_cnt(counter);
   return tmp_matrix;
 }
 
@@ -61,51 +63,92 @@ void *prod_worker(void *arg) {
   printf("prod_worker is running!\n");
   thread_args_t *params = (thread_args_t*) arg;
 
-  int loops = NUMBER_OF_MATRICES;
-  int i;
 #if OUTPUT
   printf("In worker...\n");
-  printf("loops=%d\n",*loops);
+  printf("loops=%d\n", NUMBER_OF_MATRICES);
 #endif
-  for (i = 0; i < loops; i++) {
-    sem_wait(&empty);
-    sem_wait(&mutex);
-    printf("Creating matrix #%d\n", i);
-    Matrix *matrix = GenMatrixRandom();
-    DisplayMatrix(matrix, stdout);
-    put(matrix, params);
-    sem_post(&mutex);
-    sem_post(&full);
-  }
+  int i;
+  for (i = 0; i < NUMBER_OF_MATRICES; i++) {
+    Matrix *value = GenMatrixRandom();
+    pthread_mutex_lock(&mutex);
+    while (get_cnt(counter) == BOUNDED_BUFFER_SIZE) {
+      pthread_cond_wait(&empty, &mutex);
+    }
 
-  // end case
-  for (i = 0; i < loops; i++) {
-    sem_wait(&empty);
-    sem_wait(&mutex);
-//    put(-1);
-    printf("End case ran!\n");
-    sem_post(&mutex);
-    sem_post(&full);
+#if OUTPUT
+    DisplayMatrix(value, stdout);
+#endif
+    put(value, params);
+    pthread_cond_signal(&fill);
+    pthread_mutex_unlock(&mutex);
   }
+  params->prodConStats->matrixtotal = get_cnt(params->counters->prod);
   return NULL;
 }
 
 // Matrix CONSUMER worker thread
 void *cons_worker(void *arg) {
-  thread_args_t *params = (thread_args_t*) arg;
+  thread_args_t *params = (thread_args_t *) arg;
+  Matrix *multiplied = NULL;
+  Matrix *matrix_A = NULL;
+  Matrix *matrix_B = NULL;
 
-  int loops = NUMBER_OF_MATRICES;
-  int i;
-  for (i = 0; i < loops; i++) {
-    sem_wait(&full);
-    sem_wait(&mutex);
-    Matrix *tmp_matrix = get();
-    printf("Consuming:\n");
-    DisplayMatrix(tmp_matrix, stdout);
-    increment_cnt(params->counters->cons);
-    sem_post(&mutex);
-    sem_post(&empty);
+  while (get_cnt(params->counters->cons) < NUMBER_OF_MATRICES) {
+    pthread_mutex_lock(&mutex);
+
+    while (get_cnt(counter) == 0) {
+      pthread_cond_wait(&fill, &mutex);
+    }
+
+
+    Matrix *matrix_A = get(arg);
+    if (NULL == matrix_A) {
+      printf("");
+    }
+
+    while (get_cnt(counter) == 0 && get_cnt(params->counters->cons) < NUMBER_OF_MATRICES) {
+      pthread_cond_wait(&fill, &mutex);
+    }
+    pthread_cond_signal(&empty);
+    pthread_mutex_unlock(&mutex);
+
+    use_ptr = get_cnt(params->counters->cons) % BOUNDED_BUFFER_SIZE;
+    if (get_cnt(params->counters->prod) - get_cnt(params->counters->cons) > 0) {
+      multiplied = MatrixMultiply(matrix_A, bigmatrix[use_ptr]);
+    }
+    if (multiplied != NULL) {
+      pthread_mutex_lock(&mutex);
+      Matrix *matrix_B = get(arg);
+      pthread_cond_signal(&empty);
+      pthread_mutex_unlock(&mutex);
+      params->prodConStats->multtotal++;
+      params->prodConStats->sumtotal += SumMatrix(multiplied);
+
+#if OUTPUT
+      DisplayMatrix(matrix_A, stdout);
+      printf("    X\n");
+      DisplayMatrix(matrix_B, stdout);
+      printf("    =\n");
+      DisplayMatrix(multiplied, stdout);
+      printf("\n");
+      printf("----------------------------\n");
+#endif
+      if (matrix_B != NULL) {
+      FreeMatrix(matrix_B);
+      matrix_B = NULL;
+      }
+      if (multiplied != NULL) {
+      FreeMatrix(multiplied);
+      multiplied = NULL;
+      }
+    }
+
+    if (matrix_A != NULL) {
+      FreeMatrix(matrix_A);
+      matrix_A = NULL;
+    }
 
   }
+
   return NULL;
 }

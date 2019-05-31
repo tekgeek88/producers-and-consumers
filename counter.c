@@ -32,6 +32,12 @@ void init_counters(counters_t *counters) {
   init_cnt(counters->prod);
 }
 
+void decrement_cnt(counter_t *c)  {
+  pthread_mutex_lock(&c->lock);
+  c->value--;
+  pthread_mutex_unlock(&c->lock);
+}
+
 void increment_cnt(counter_t *c)  {
   pthread_mutex_lock(&c->lock);
   c->value++;
